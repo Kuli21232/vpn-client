@@ -1,194 +1,167 @@
-import React, { useEffect, useRef, useCallback } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  StatusBar,
-  Animated,
-} from 'react-native';
+import React from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, StatusBar } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { MaterialIcons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
 import { useApp } from '../context/AppContext';
 import { useSettings } from '../context/SettingsContext';
 import ConnectButton from '../components/ConnectButton';
 import LocationList from '../components/LocationList';
-import { Ionicons } from '@expo/vector-icons';
-
-const STATUS_LABELS: Record<string, { ru: string; en: string }> = {
-  disconnected: { ru: 'Нажмите для подключения', en: 'Tap to connect' },
-  connecting: { ru: 'Установка туннеля...', en: 'Setting up tunnel...' },
-  connected: { ru: '', en: '' },
-  disconnecting: { ru: 'Отключение...', en: 'Disconnecting...' },
-};
+import { mono } from '../theme/typography';
 
 function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} Б`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} КБ`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} МБ`;
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
 export default function HomeScreen() {
   const { colors, isDark } = useTheme();
-  const { language, fontScale } = useSettings();
   const {
-    vpnStatus,
-    setVpnStatus,
-    selectedLocation,
-    setSelectedLocation,
-    locations,
-    ping,
-    setPing,
+    dnsPreset,
+    dns1,
+    dns2,
+    fontScale,
+    fragmentationEnabled,
+    language,
+    muxEnabled,
+    pingProtocol,
+  } = useSettings();
+  const {
+    activeSubscriptionName,
+    isPingingNodes,
+    isRefreshingNodes,
+    nodes,
+    pingNodes,
+    refreshNodes,
+    selectNode,
+    selectedNode,
     sentBytes,
-    setSentBytes,
     receivedBytes,
-    setReceivedBytes,
+    toggleConnection,
+    vpnStatus,
   } = useApp();
 
-  const trafficInterval = useRef<ReturnType<typeof setInterval> | null>(null);
-  const statsOpacity = useRef(new Animated.Value(0)).current;
+  const t = (ru: string, en: string) => (language === 'ru' ? ru : en);
 
-  useEffect(() => {
-    if (vpnStatus === 'connected') {
-      Animated.timing(statsOpacity, { toValue: 1, duration: 500, useNativeDriver: true }).start();
-      trafficInterval.current = setInterval(() => {
-        setSentBytes((prev) => prev + Math.floor(Math.random() * 800 + 100));
-        setReceivedBytes((prev) => prev + Math.floor(Math.random() * 3000 + 500));
-      }, 1000);
-    } else {
-      Animated.timing(statsOpacity, { toValue: 0, duration: 300, useNativeDriver: true }).start();
-      if (trafficInterval.current) {
-        clearInterval(trafficInterval.current);
-        trafficInterval.current = null;
-      }
-      if (vpnStatus === 'disconnected') {
-        setSentBytes(0);
-        setReceivedBytes(0);
-      }
-    }
-    return () => {
-      if (trafficInterval.current) clearInterval(trafficInterval.current);
-    };
-  }, [vpnStatus]);
+  const statusCopy =
+    vpnStatus === 'connected'
+      ? t('ТУННЕЛЬ АКТИВЕН', 'TUNNEL ACTIVE')
+      : vpnStatus === 'connecting'
+      ? t('ПОДКЛЮЧАЕМСЯ К УЗЛУ', 'CONNECTING TO NODE')
+      : vpnStatus === 'disconnecting'
+      ? t('ОТКЛЮЧАЕМ ТУННЕЛЬ', 'DISCONNECTING')
+      : t('Нажмите для подключения', 'Tap to connect');
 
-  const handleConnect = useCallback(() => {
-    if (vpnStatus === 'disconnected') {
-      setVpnStatus('connecting');
-      setTimeout(() => setVpnStatus('connected'), 2000 + Math.random() * 1000);
-    } else if (vpnStatus === 'connected') {
-      setVpnStatus('disconnecting');
-      setTimeout(() => setVpnStatus('disconnected'), 1200);
-    }
-  }, [vpnStatus]);
-
-  const handlePing = useCallback(() => {
-    setPing(null);
-    setTimeout(() => setPing(Math.floor(Math.random() * 60 + 15)), 800);
-  }, []);
-
-  const handleRefresh = useCallback(() => {
-    if (vpnStatus === 'connected') {
-      setVpnStatus('disconnecting');
-      setTimeout(() => {
-        setVpnStatus('connecting');
-        setTimeout(() => setVpnStatus('connected'), 2000);
-      }, 1000);
-    }
-  }, [vpnStatus]);
-
-  const isConnected = vpnStatus === 'connected';
-  const statusLabel = STATUS_LABELS[vpnStatus]?.[language] ?? '';
+  const dnsLabel = dnsPreset === 'custom' ? `${dns1}/${dns2}` : dnsPreset.toUpperCase();
+  const metaLine = `${pingProtocol.toUpperCase()} / ${dnsLabel} / MUX ${muxEnabled ? 'on' : 'off'} / FRAG ${
+    fragmentationEnabled ? 'on' : 'off'
+  }`;
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.bg }]}>
+    <SafeAreaView style={[styles.root, { backgroundColor: colors.bg }]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.bg} />
 
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
         bounces={false}
-        contentInset={{ bottom: 90 }}
       >
-        <View style={styles.buttonSection}>
-          <ConnectButton status={vpnStatus} onPress={handleConnect} />
+        <View style={styles.hero}>
+          <ConnectButton status={vpnStatus} onPress={toggleConnection} />
 
-          {isConnected && (
-            <Animated.View style={[styles.connectedMeta, { opacity: statsOpacity }]}>
-              <Text style={[styles.locationLabel, { color: colors.fg, fontSize: 15 * fontScale }]}>
-                • {selectedLocation.name}
-              </Text>
-              <Text style={[styles.metaLine, { color: colors.glass45, fontSize: 11 * fontScale }]}>
-                DNS 1.1.1.1/8.8.8.8 • MUX off • MTU 1300 • Noise off
-              </Text>
-            </Animated.View>
-          )}
+          <View style={styles.heroCopy}>
+            <Text style={[styles.statusLabel, { color: colors.glass45, fontSize: 15 * fontScale }]}>
+              {statusCopy}
+            </Text>
 
-          {!isConnected && statusLabel ? (
-            <View style={styles.statusRow}>
-              <View style={[styles.statusDot, { backgroundColor: isConnected ? colors.active : colors.glass30 }]} />
-              <Text style={[styles.statusText, { color: colors.glass60, fontSize: 13 * fontScale }]}>
-                {statusLabel}
-              </Text>
-            </View>
-          ) : null}
+            {selectedNode ? (
+              <View style={styles.selectedNodeBlock}>
+                <Text style={[styles.selectedNodeName, { color: colors.fg, fontSize: 14 * fontScale }]}>
+                  {selectedNode.flag} {selectedNode.name}
+                </Text>
+                <Text style={[styles.metaLine, { color: colors.glass45, fontSize: 10 * fontScale }]}>
+                  {metaLine}
+                </Text>
+                {activeSubscriptionName ? (
+                  <Text style={[styles.metaLine, { color: colors.glass30, fontSize: 10 * fontScale }]}>
+                    {activeSubscriptionName}
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
+          </View>
         </View>
 
-        {isConnected && (
-          <Animated.View style={[styles.statsCard, { backgroundColor: colors.glass04, borderColor: colors.glass12, opacity: statsOpacity }]}>
-            <View style={styles.statItem}>
-              <Text style={[styles.statArrow, { color: colors.glass45, fontSize: 11 * fontScale }]}>↑</Text>
-              <Text style={[styles.statValue, { color: colors.fg, fontSize: 20 * fontScale }]}>
-                {formatBytes(sentBytes)}
-              </Text>
-              <Text style={[styles.statLabel, { color: colors.glass45, fontSize: 10 * fontScale }]}>
-                {language === 'ru' ? 'ОТПРАВЛЕНО' : 'SENT'}
-              </Text>
-            </View>
-            <View style={[styles.statDivider, { backgroundColor: colors.glass12 }]} />
-            <View style={styles.statItem}>
-              <Text style={[styles.statArrow, { color: colors.glass45, fontSize: 11 * fontScale }]}>↓</Text>
-              <Text style={[styles.statValue, { color: colors.fg, fontSize: 20 * fontScale }]}>
-                {formatBytes(receivedBytes)}
-              </Text>
-              <Text style={[styles.statLabel, { color: colors.glass45, fontSize: 10 * fontScale }]}>
-                {language === 'ru' ? 'ПОЛУЧЕНО' : 'RECEIVED'}
-              </Text>
-            </View>
-          </Animated.View>
-        )}
-
-        <View style={styles.actionRow}>
-          <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: colors.glass04, borderColor: colors.glass12 }]}
-            onPress={handleRefresh}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.actionBtnText, { color: colors.fg, fontSize: 13 * fontScale }]}>
-              ↺  {language === 'ru' ? 'ОБНОВИТЬ' : 'REFRESH'}
+        <View style={[styles.trafficCard, { backgroundColor: colors.glass04, borderColor: colors.glass12 }]}>
+          <View style={styles.trafficBlock}>
+            <Text style={[styles.trafficLabel, { color: colors.glass45, fontSize: 11 * fontScale }]}>
+              {t('ОТПРАВЛЕНО', 'UPLINK')}
             </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: colors.glass04, borderColor: colors.glass12 }]}
-            onPress={handlePing}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.actionBtnText, { color: colors.fg, fontSize: 13 * fontScale }]}>
-              ◉  {language === 'ru' ? 'ПИНГ' : 'PING'}
-              {ping !== null ? `  ${ping} ms` : ''}
+            <Text style={[styles.trafficValue, { color: colors.fg, fontSize: 18 * fontScale }]}>
+              {formatBytes(sentBytes)}
             </Text>
-          </TouchableOpacity>
+          </View>
+
+          <View style={[styles.trafficDivider, { backgroundColor: colors.glass08 }]} />
+
+          <View style={styles.trafficBlock}>
+            <Text style={[styles.trafficLabel, { color: colors.glass45, fontSize: 11 * fontScale }]}>
+              {t('ПОЛУЧЕНО', 'DOWNLINK')}
+            </Text>
+            <Text style={[styles.trafficValue, { color: colors.fg, fontSize: 18 * fontScale }]}>
+              {formatBytes(receivedBytes)}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.listHeader}>
+          <Text style={[styles.listTitle, { color: colors.glass45, fontSize: 11 * fontScale }]}>
+            {t('ЛОКАЦИИ', 'LOCATIONS')} / {nodes.length}
+          </Text>
+
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              style={[styles.headerButton, { backgroundColor: colors.glass08 }]}
+              onPress={refreshNodes}
+              activeOpacity={0.72}
+            >
+              <MaterialIcons name="refresh" size={16} color={colors.fg} />
+              <Text style={[styles.headerButtonLabel, { color: colors.fg, fontSize: 11 * fontScale }]}>
+                {isRefreshingNodes ? t('ОБНОВЛЯЕМ', 'SYNCING') : t('ОБНОВИТЬ', 'REFRESH')}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.headerButton, { backgroundColor: colors.glass08 }]}
+              onPress={pingNodes}
+              activeOpacity={0.72}
+            >
+              <MaterialIcons name="speed" size={16} color={colors.fg} />
+              <Text style={[styles.headerButtonLabel, { color: colors.fg, fontSize: 11 * fontScale }]}>
+                {isPingingNodes ? t('ПИНГУЕМ', 'PINGING') : t('ПИНГ', 'PING')}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <LocationList
-          locations={locations}
-          selected={selectedLocation}
-          onSelect={setSelectedLocation}
+          nodes={nodes}
+          selectedId={selectedNode?.id ?? null}
+          onSelect={(nodeId) => {
+            void selectNode(nodeId);
+          }}
         />
 
-        <View style={{ height: 30 }} />
+        <View style={{ height: 120 }} />
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -197,82 +170,81 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scroll: {
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    gap: 16,
+    paddingHorizontal: 16,
+    paddingTop: 6,
+    gap: 14,
   },
-  buttonSection: {
+  hero: {
     alignItems: 'center',
-    paddingBottom: 10,
-    gap: 20,
-    minHeight: 240,
-    justifyContent: 'center',
+    gap: 12,
+    paddingTop: 4,
   },
-  connectedMeta: {
+  heroCopy: {
     alignItems: 'center',
-    gap: 5,
+    gap: 6,
   },
-  locationLabel: {
-    fontWeight: '500',
-    letterSpacing: 0.3,
+  statusLabel: {
+    fontFamily: mono.regular,
+    letterSpacing: 0.2,
+  },
+  selectedNodeBlock: {
+    alignItems: 'center',
+    gap: 2,
+  },
+  selectedNodeName: {
+    fontFamily: mono.light,
+    letterSpacing: 0,
   },
   metaLine: {
-    letterSpacing: 0.5,
     textAlign: 'center',
+    fontFamily: mono.regular,
   },
-  statusRow: {
+  trafficCard: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  statusText: {
-    letterSpacing: 1,
-  },
-  statsCard: {
-    flexDirection: 'row',
-    borderRadius: 16,
     borderWidth: 1,
-    overflow: 'hidden',
-    backgroundColor: 'transparent',
+    borderRadius: 22,
+    paddingVertical: 13,
   },
-  statItem: {
+  trafficBlock: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: 18,
-    gap: 4,
+    gap: 2,
   },
-  statArrow: {
-    letterSpacing: 0.5,
-  },
-  statValue: {
-    fontWeight: '600',
-    letterSpacing: 0.5,
-  },
-  statLabel: {
+  trafficLabel: {
+    fontFamily: mono.bold,
     letterSpacing: 1.5,
   },
-  statDivider: {
-    width: 1,
-    marginVertical: 12,
+  trafficValue: {
+    fontFamily: mono.bold,
   },
-  actionRow: {
+  trafficDivider: {
+    width: 1,
+    marginVertical: 6,
+  },
+  listHeader: {
     flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 10,
   },
-  actionBtn: {
-    flex: 1,
-    borderRadius: 12,
-    borderWidth: 1,
-    paddingVertical: 14,
-    alignItems: 'center',
+  listTitle: {
+    fontFamily: mono.bold,
+    letterSpacing: 2.1,
   },
-  actionBtnText: {
-    fontWeight: '500',
-    letterSpacing: 1.2,
+  headerActions: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  headerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 14,
+  },
+  headerButtonLabel: {
+    fontFamily: mono.bold,
+    letterSpacing: 0.8,
   },
 });

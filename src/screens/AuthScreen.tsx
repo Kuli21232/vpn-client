@@ -1,338 +1,230 @@
-import React, { useState, useRef, useEffect } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  Animated,
-  Easing,
-  StatusBar,
-  Linking,
-} from 'react-native';
+import React from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, StatusBar } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { MaterialIcons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
-import { useApp, UserProfile } from '../context/AppContext';
+import { useApp } from '../context/AppContext';
 import { useSettings } from '../context/SettingsContext';
-import { verifyTelegramAuth } from '../services/api';
+import { SPACY_BOT_USERNAME } from '../services/telegramAuth';
+import { mono } from '../theme/typography';
 
-const BOT_USERNAME = 'SpacyVPN_bot';
-
-interface Props {
-  onAuth: () => void;
-}
-
-type AuthStep = 'idle' | 'waiting' | 'checking' | 'error';
-
-export default function AuthScreen({ onAuth }: Props) {
+export default function AuthScreen() {
   const { colors, isDark } = useTheme();
-  const { setProfile, setIsAuthenticated } = useApp();
+  const { authState, cancelAuth, enterDemoMode, loginWithTelegram } = useApp();
   const { language, fontScale } = useSettings();
-  const [step, setStep] = useState<AuthStep>('idle');
-  const [token, setToken] = useState('');
-  const [errorMsg, setErrorMsg] = useState('');
-
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const dotAnims = [
-    useRef(new Animated.Value(0)).current,
-    useRef(new Animated.Value(0)).current,
-    useRef(new Animated.Value(0)).current,
-  ];
-
-  useEffect(() => {
-    Animated.timing(fadeAnim, { toValue: 1, duration: 700, useNativeDriver: true }).start();
-  }, []);
-
-  useEffect(() => {
-    if (step === 'waiting' || step === 'checking') {
-      const anim = (dot: Animated.Value, delay: number) =>
-        Animated.loop(
-          Animated.sequence([
-            Animated.delay(delay),
-            Animated.timing(dot, { toValue: 1, duration: 300, useNativeDriver: true }),
-            Animated.timing(dot, { toValue: 0.2, duration: 300, useNativeDriver: true }),
-            Animated.delay(600 - delay),
-          ])
-        );
-      dotAnims.forEach((d, i) => anim(d, i * 150).start());
-
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, { toValue: 1.06, duration: 1500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-          Animated.timing(pulseAnim, { toValue: 1, duration: 1500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        ])
-      ).start();
-    } else {
-      dotAnims.forEach((d) => { d.stopAnimation(); d.setValue(0); });
-      pulseAnim.stopAnimation();
-      pulseAnim.setValue(1);
-    }
-  }, [step]);
 
   const t = (ru: string, en: string) => (language === 'ru' ? ru : en);
-
-  const generateToken = () => Math.random().toString(36).substring(2, 10).toUpperCase();
-
-  const handleTelegramAuth = async () => {
-    const newToken = generateToken();
-    setToken(newToken);
-    setStep('waiting');
-    setErrorMsg('');
-
-    try {
-      const url = `https://t.me/${BOT_USERNAME}?start=${newToken}`;
-      await Linking.openURL(url);
-      pollForAuth(newToken);
-    } catch {
-      setStep('error');
-      setErrorMsg(t('Не удалось открыть Telegram', 'Failed to open Telegram'));
-    }
-  };
-
-  const pollForAuth = (tok: string) => {
-    let attempts = 0;
-    const maxAttempts = 30;
-
-    const interval = setInterval(() => {
-      attempts++;
-      if (attempts >= maxAttempts) {
-        clearInterval(interval);
-        setStep('error');
-        setErrorMsg(t('Время ожидания истекло', 'Authentication timeout'));
-        return;
-      }
-
-      checkAuth(tok, interval);
-    }, 2000);
-  };
-
-  const checkAuth = async (tok: string, interval: ReturnType<typeof setInterval>) => {
-    try {
-      setStep('checking');
-      const profile = await verifyTelegramAuth(tok);
-      if (profile) {
-        clearInterval(interval);
-        setProfile(profile);
-        setIsAuthenticated(true);
-        onAuth();
-      } else {
-        setStep('waiting');
-      }
-    } catch {
-      setStep('waiting');
-    }
-  };
-
-  const handleRetry = () => {
-    setStep('idle');
-    setErrorMsg('');
-    setToken('');
-  };
+  const isPending = authState.stage === 'opening' || authState.stage === 'polling';
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.bg }]}>
+    <SafeAreaView style={[styles.root, { backgroundColor: colors.bg }]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.bg} />
 
-      <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
-        <Animated.View
-          style={[
-            styles.logoCircle,
-            {
-              backgroundColor: colors.glass04,
-              borderColor: colors.glass20,
-              transform: [{ scale: pulseAnim }],
-            },
-          ]}
-        >
-          <Text style={styles.logoText}>⚡</Text>
-        </Animated.View>
+      <View style={styles.content}>
+        <View style={[styles.logoCircle, { backgroundColor: colors.glass04, borderColor: colors.glass12 }]}>
+          <MaterialIcons name="send" size={46} color={colors.fg} />
+        </View>
 
-        <Text style={[styles.appName, { color: colors.fg, fontSize: 32 * fontScale }]}>SPACY VPN</Text>
-        <Text style={[styles.tagline, { color: colors.glass45, fontSize: 14 * fontScale }]}>
-          {t('Вход через Telegram', 'Sign in with Telegram')}
-        </Text>
+        <View style={styles.heading}>
+          <Text style={[styles.appName, { color: colors.fg, fontSize: 32 * fontScale }]}>SPACY VPN</Text>
+          <Text style={[styles.tagline, { color: colors.glass45, fontSize: 14 * fontScale }]}>
+            {t('Авторизация через Telegram', 'Telegram authentication')}
+          </Text>
+        </View>
 
-        {step === 'idle' && (
-          <TouchableOpacity
-            style={[styles.tgBtn, { backgroundColor: colors.fg }]}
-            onPress={handleTelegramAuth}
-            activeOpacity={0.85}
-          >
-            <Text style={[styles.tgBtnIcon, { color: colors.bg }]}>✈</Text>
-            <Text style={[styles.tgBtnText, { color: colors.bg, fontSize: 15 * fontScale }]}>
-              {t('Войти через Telegram', 'Continue with Telegram')}
-            </Text>
-          </TouchableOpacity>
-        )}
+        <View style={[styles.panel, { backgroundColor: colors.glass04, borderColor: colors.glass12 }]}>
+          <Text style={[styles.panelTitle, { color: colors.fg, fontSize: 13 * fontScale }]}>
+            {t('СИСТЕМНЫЙ ВХОД', 'SYSTEM LOGIN')}
+          </Text>
+          <Text style={[styles.panelCopy, { color: colors.glass60, fontSize: 14 * fontScale }]}>
+            {t(
+              'Приложение откроет Telegram-бота, получит стартовый код и дождется подтверждения от backend.',
+              'The app opens the Telegram bot, requests a start code, and waits for backend confirmation.'
+            )}
+          </Text>
 
-        {(step === 'waiting' || step === 'checking') && (
-          <View style={styles.waitingBlock}>
-            <View style={[styles.tokenBox, { backgroundColor: colors.glass08, borderColor: colors.glass20 }]}>
-              <Text style={[styles.tokenLabel, { color: colors.glass45, fontSize: 11 * fontScale }]}>
+          {authState.code ? (
+            <View style={[styles.codeCard, { backgroundColor: colors.glass08, borderColor: colors.glass12 }]}>
+              <Text style={[styles.codeLabel, { color: colors.glass45, fontSize: 11 * fontScale }]}>
                 {t('КОД АВТОРИЗАЦИИ', 'AUTH CODE')}
               </Text>
-              <Text style={[styles.tokenValue, { color: colors.fg, fontSize: 22 * fontScale }]}>
-                {token}
+              <Text style={[styles.codeValue, { color: colors.fg, fontSize: 22 * fontScale }]}>
+                {authState.code}
               </Text>
             </View>
+          ) : null}
 
-            <View style={styles.dotsRow}>
-              {dotAnims.map((d, i) => (
-                <Animated.View
-                  key={i}
-                  style={[styles.dot, { backgroundColor: colors.fg, opacity: d }]}
-                />
-              ))}
-            </View>
-
-            <Text style={[styles.waitText, { color: colors.glass60, fontSize: 13 * fontScale }]}>
-              {step === 'checking'
-                ? t('Проверка...', 'Verifying...')
-                : t('Ожидание подтверждения в боте', 'Waiting for bot confirmation')}
+          {authState.errorMessage ? (
+            <Text style={[styles.errorText, { color: colors.error, fontSize: 13 * fontScale }]}>
+              {authState.errorMessage}
             </Text>
+          ) : null}
 
-            <TouchableOpacity onPress={handleRetry} activeOpacity={0.7}>
-              <Text style={[styles.cancelText, { color: colors.glass45, fontSize: 13 * fontScale }]}>
-                {t('Отмена', 'Cancel')}
+          <TouchableOpacity
+            style={[styles.actionButton, { backgroundColor: colors.fg }]}
+            onPress={loginWithTelegram}
+            activeOpacity={0.86}
+            disabled={isPending}
+          >
+            <MaterialIcons name="telegram" size={18} color={colors.bg} />
+            <Text style={[styles.actionLabel, { color: colors.bg, fontSize: 14 * fontScale }]}>
+              {isPending
+                ? t('ОЖИДАНИЕ ПОДТВЕРЖДЕНИЯ', 'WAITING FOR CONFIRMATION')
+                : t('ВОЙТИ ЧЕРЕЗ TELEGRAM', 'CONTINUE WITH TELEGRAM')}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.secondaryButton,
+              { backgroundColor: colors.glass04, borderColor: colors.glass12 },
+            ]}
+            onPress={() => {
+              void enterDemoMode();
+            }}
+            activeOpacity={0.82}
+          >
+            <MaterialIcons name="visibility" size={18} color={colors.fg} />
+            <Text style={[styles.secondaryLabel, { color: colors.fg, fontSize: 14 * fontScale }]}>
+              {t('ОТКРЫТЬ DEMO РЕЖИМ', 'OPEN DEMO MODE')}
+            </Text>
+          </TouchableOpacity>
+
+          <Text style={[styles.demoHint, { color: colors.glass45, fontSize: 12 * fontScale }]}>
+            {t(
+              'Demo режим открывает локальный профиль и тестовые серверы без Telegram и backend.',
+              'Demo mode opens a local profile and test servers without Telegram or backend.'
+            )}
+          </Text>
+
+          {isPending ? (
+            <TouchableOpacity onPress={cancelAuth} activeOpacity={0.7}>
+              <Text style={[styles.cancelLabel, { color: colors.glass45, fontSize: 13 * fontScale }]}>
+                {t('Отменить попытку входа', 'Cancel sign-in')}
               </Text>
             </TouchableOpacity>
-          </View>
-        )}
-
-        {step === 'error' && (
-          <View style={styles.errorBlock}>
-            <Text style={[styles.errorMsg, { color: colors.error, fontSize: 14 * fontScale }]}>
-              {errorMsg}
-            </Text>
-            <TouchableOpacity
-              style={[styles.retryBtn, { borderColor: colors.glass20 }]}
-              onPress={handleRetry}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.retryText, { color: colors.fg, fontSize: 14 * fontScale }]}>
-                {t('Попробовать снова', 'Try again')}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
+          ) : null}
+        </View>
 
         <Text style={[styles.hint, { color: colors.glass30, fontSize: 12 * fontScale }]}>
           {t(
-            `Откроется Telegram с ботом @${BOT_USERNAME}.\nОтправьте /start для входа.`,
-            `Telegram will open with @${BOT_USERNAME}.\nSend /start to authenticate.`
+            `После нажатия откроется @${SPACY_BOT_USERNAME}. Подтверждение пройдет автоматически, когда backend получит ответ от Telegram.`,
+            `After tapping, @${SPACY_BOT_USERNAME} opens. The app completes sign-in as soon as the backend receives Telegram confirmation.`
           )}
         </Text>
-      </Animated.View>
-    </View>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    justifyContent: 'center',
   },
   content: {
+    flex: 1,
     alignItems: 'center',
-    paddingHorizontal: 32,
-    gap: 20,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    gap: 28,
   },
   logoCircle: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    borderWidth: 1.5,
+    width: 118,
+    height: 118,
+    borderRadius: 59,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
   },
-  logoText: {
-    fontSize: 40,
+  heading: {
+    alignItems: 'center',
+    gap: 8,
   },
   appName: {
-    fontWeight: '700',
-    letterSpacing: 4,
+    fontFamily: mono.light,
+    letterSpacing: 3.6,
   },
   tagline: {
-    letterSpacing: 0.5,
-    marginTop: -8,
+    fontFamily: mono.regular,
+    letterSpacing: 0.4,
   },
-  tgBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    borderRadius: 14,
-    gap: 10,
-    marginTop: 8,
+  panel: {
     width: '100%',
-    justifyContent: 'center',
-  },
-  tgBtnIcon: {
-    fontSize: 18,
-  },
-  tgBtnText: {
-    fontWeight: '600',
-    letterSpacing: 0.3,
-  },
-  waitingBlock: {
-    alignItems: 'center',
-    gap: 16,
-    width: '100%',
-  },
-  tokenBox: {
-    width: '100%',
-    alignItems: 'center',
-    paddingVertical: 18,
-    borderRadius: 14,
+    borderRadius: 26,
     borderWidth: 1,
+    padding: 22,
+    gap: 16,
+  },
+  panelTitle: {
+    fontFamily: mono.bold,
+    letterSpacing: 2.1,
+  },
+  panelCopy: {
+    lineHeight: 21,
+    fontFamily: mono.regular,
+  },
+  codeCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+    alignItems: 'center',
     gap: 6,
   },
-  tokenLabel: {
+  codeLabel: {
     letterSpacing: 2,
     textTransform: 'uppercase',
+    fontFamily: mono.bold,
   },
-  tokenValue: {
-    fontWeight: '700',
-    letterSpacing: 8,
+  codeValue: {
+    letterSpacing: 4,
+    fontFamily: mono.extraBold,
   },
-  dotsRow: {
+  errorText: {
+    lineHeight: 20,
+    fontFamily: mono.regular,
+  },
+  actionButton: {
     flexDirection: 'row',
-    gap: 8,
     alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 18,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    gap: 10,
   },
-  dot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
+  actionLabel: {
+    fontFamily: mono.extraBold,
+    letterSpacing: 1,
   },
-  waitText: {
+  secondaryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingVertical: 15,
+    paddingHorizontal: 18,
+    gap: 10,
+  },
+  secondaryLabel: {
+    fontFamily: mono.bold,
+    letterSpacing: 0.9,
+  },
+  demoHint: {
+    lineHeight: 19,
     textAlign: 'center',
-    letterSpacing: 0.3,
+    fontFamily: mono.regular,
   },
-  cancelText: {
-    letterSpacing: 0.5,
+  cancelLabel: {
+    textAlign: 'center',
+    fontFamily: mono.regular,
     textDecorationLine: 'underline',
   },
-  errorBlock: {
-    alignItems: 'center',
-    gap: 14,
-    width: '100%',
-  },
-  errorMsg: {
-    textAlign: 'center',
-  },
-  retryBtn: {
-    paddingVertical: 14,
-    paddingHorizontal: 32,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  retryText: {
-    fontWeight: '500',
-  },
   hint: {
+    width: '100%',
     textAlign: 'center',
-    lineHeight: 18,
-    marginTop: 8,
+    lineHeight: 19,
+    fontFamily: mono.regular,
   },
 });

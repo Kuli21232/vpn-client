@@ -1,61 +1,83 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
-import { Location } from '../context/AppContext';
 import { useSettings } from '../context/SettingsContext';
+import { mono } from '../theme/typography';
+import { VpnNode } from '../types/app';
 
 interface Props {
-  locations: Location[];
-  selected: Location;
-  onSelect: (loc: Location) => void;
+  nodes: VpnNode[];
+  selectedId: string | null;
+  onSelect: (nodeId: string) => void;
 }
 
-export default function LocationList({ locations, selected, onSelect }: Props) {
+export default function LocationList({ nodes, selectedId, onSelect }: Props) {
   const { colors } = useTheme();
   const { fontScale } = useSettings();
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.glass04, borderColor: colors.glass12 }]}>
-      <View style={[styles.header, { borderBottomColor: colors.glass12 }]}>
-        <Text style={[styles.headerIcon, { color: colors.glass45 }]}>↓</Text>
-        <Text style={[styles.headerText, { color: colors.glass45, fontSize: 11 * fontScale }]}>
-          ДОСТУПНЫЕ ЛОКАЦИИ
-        </Text>
-        <Text style={[styles.count, { color: colors.glass45, fontSize: 11 * fontScale }]}>
-          {locations.length}
-        </Text>
-      </View>
-
-      {locations.map((loc, idx) => {
-        const isSelected = loc.id === selected.id;
-        const isLast = idx === locations.length - 1;
+    <View style={styles.container}>
+      {nodes.map((node) => {
+        const isSelected = node.id === selectedId;
 
         return (
           <TouchableOpacity
-            key={loc.id}
-            onPress={() => onSelect(loc)}
+            key={node.id}
+            onPress={() => onSelect(node.id)}
             activeOpacity={0.7}
             style={[
               styles.row,
-              !isLast && { borderBottomWidth: 1, borderBottomColor: colors.glass08 },
+              {
+                backgroundColor: isSelected ? 'rgba(18,18,20,1)' : 'transparent',
+              },
             ]}
           >
-            <Text style={styles.flag}>{loc.flag}</Text>
-            <Text
-              style={[
-                styles.name,
-                {
-                  color: isSelected ? colors.fg : colors.glass80,
-                  fontSize: 15 * fontScale,
-                  fontWeight: isSelected ? '500' : '400',
-                },
-              ]}
-            >
-              {loc.name}
-            </Text>
-            {isSelected && (
-              <Text style={[styles.check, { color: colors.fg }]}>✓</Text>
-            )}
+            {isSelected ? <View style={[styles.selectedBar, { backgroundColor: colors.fg }]} /> : null}
+
+            <View style={[styles.flagWrap, { backgroundColor: colors.glass08 }]}>
+              <Text style={styles.flag}>{node.flag}</Text>
+            </View>
+
+            <View style={styles.content}>
+              <Text
+                style={[
+                  styles.name,
+                  {
+                    color: colors.fg,
+                    fontSize: 16 * fontScale,
+                  },
+                ]}
+              >
+                {node.name}
+              </Text>
+
+              <View style={styles.metaRow}>
+                <MaterialCommunityIcons name="signal-cellular-3" size={16} color={colors.active} />
+                <Text
+                  style={[
+                    styles.metaText,
+                    {
+                      color: colors.active,
+                      fontSize: 12 * fontScale,
+                    },
+                  ]}
+                >
+                  {node.pingMs !== null ? `${node.pingMs} ms` : 'нет данных'}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.trailing}>
+              <View style={[styles.iconCircle, { backgroundColor: colors.glass08 }]}>
+                <MaterialIcons name="visibility" size={22} color={colors.glass45} />
+              </View>
+              <MaterialIcons
+                name={isSelected ? 'check-circle' : 'radio-button-unchecked'}
+                size={28}
+                color={isSelected ? colors.fg : colors.glass20}
+              />
+            </View>
           </TouchableOpacity>
         );
       })}
@@ -65,45 +87,63 @@ export default function LocationList({ locations, selected, onSelect }: Props) {
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 16,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    gap: 6,
-  },
-  headerIcon: {
-    fontSize: 12,
-  },
-  headerText: {
-    flex: 1,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
-  count: {
-    letterSpacing: 0.5,
+    gap: 10,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 15,
-    gap: 12,
+    borderRadius: 22,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    position: 'relative',
+  },
+  selectedBar: {
+    position: 'absolute',
+    left: 9,
+    top: 14,
+    bottom: 14,
+    width: 3,
+    borderRadius: 2,
+  },
+  flagWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 10,
   },
   flag: {
-    fontSize: 20,
+    fontSize: 24,
+  },
+  content: {
+    flex: 1,
+    marginLeft: 12,
+    gap: 4,
   },
   name: {
-    flex: 1,
-    letterSpacing: 0.2,
+    letterSpacing: 0,
+    fontFamily: mono.light,
   },
-  check: {
-    fontSize: 16,
-    fontWeight: '500',
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  metaText: {
+    fontFamily: mono.bold,
+  },
+  trailing: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    marginLeft: 10,
+  },
+  iconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

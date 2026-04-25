@@ -8,7 +8,7 @@ interface ThemeContextType {
   colors: ThemeColors;
   isDark: boolean;
   fadeAnim: Animated.Value;
-  setMode: (mode: ThemeMode) => void;
+  setMode: (mode: ThemeMode) => Promise<void>;
 }
 
 const ThemeContext = createContext<ThemeContextType>({
@@ -16,7 +16,7 @@ const ThemeContext = createContext<ThemeContextType>({
   colors: darkColors,
   isDark: true,
   fadeAnim: new Animated.Value(1),
-  setMode: () => {},
+  setMode: async () => {},
 });
 
 export function ThemeProvider({ children }: { children: ReactNode }) {

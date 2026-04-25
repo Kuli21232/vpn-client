@@ -1,234 +1,262 @@
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  TextInput,
-  Switch,
-  StatusBar,
-} from 'react-native';
+import React from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Switch, StatusBar } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { MaterialIcons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
-import { useSettings, Language, FontSize, TrafficMode } from '../context/SettingsContext';
+import {
+  DnsPreset,
+  FontSize,
+  Language,
+  OnDemandMode,
+  PingProtocol,
+  useSettings,
+} from '../context/SettingsContext';
 import { ThemeMode } from '../theme/colors';
+import { mono } from '../theme/typography';
 
 export default function SettingsScreen() {
   const { colors, isDark, mode, setMode } = useTheme();
   const {
-    language, setSetting, fontSize, dns1, dns2,
-    trafficMode, muxEnabled, muxConcurrency, noiseEnabled, fontScale,
+    applyDnsPreset,
+    dns1,
+    dns2,
+    dnsPreset,
+    fontScale,
+    fontSize,
+    fragmentationEnabled,
+    language,
+    muxEnabled,
+    onDemandMode,
+    pingProtocol,
+    routeAllTraffic,
+    setSetting,
   } = useSettings();
 
   const t = (ru: string, en: string) => (language === 'ru' ? ru : en);
 
-  const SectionLabel = ({ label }: { label: string }) => (
-    <Text style={[styles.sectionLabel, { color: colors.glass45, fontSize: 11 * fontScale, borderBottomColor: colors.glass08 }]}>
+  const cycleValue = async <T extends string>(
+    values: T[],
+    current: T,
+    onChange: (next: T) => Promise<void> | void
+  ) => {
+    const currentIndex = values.indexOf(current);
+    const next = values[(currentIndex + 1) % values.length];
+    await onChange(next);
+  };
+
+  const SectionTitle = ({ label }: { label: string }) => (
+    <Text style={[styles.sectionTitle, { color: colors.glass45, fontSize: 11 * fontScale }]}>
       {label}
     </Text>
   );
 
-  const SegmentControl = <T extends string>({
-    options,
-    value,
-    onChange,
-    labels,
-  }: {
-    options: T[];
-    value: T;
-    onChange: (v: T) => void;
-    labels?: string[];
-  }) => (
-    <View style={[styles.segment, { backgroundColor: colors.glass08, borderColor: colors.glass12 }]}>
-      {options.map((opt, i) => {
-        const active = opt === value;
-        return (
-          <TouchableOpacity
-            key={opt}
-            style={[
-              styles.segItem,
-              active && { backgroundColor: colors.fg },
-            ]}
-            onPress={() => onChange(opt)}
-            activeOpacity={0.8}
-          >
-            <Text
-              style={[
-                styles.segText,
-                {
-                  color: active ? colors.bg : colors.glass60,
-                  fontSize: 12 * fontScale,
-                },
-              ]}
-            >
-              {labels ? labels[i] : opt.toUpperCase()}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
-    </View>
-  );
-
-  const ThemeOption = ({
-    option,
+  const OptionRow = ({
     icon,
     label,
+    value,
+    onPress,
+    isLast = false,
   }: {
-    option: ThemeMode;
-    icon: string;
+    icon: keyof typeof MaterialIcons.glyphMap;
     label: string;
-  }) => {
-    const active = mode === option;
-    return (
-      <TouchableOpacity
-        style={[styles.themeRow, { borderBottomColor: colors.glass08 }]}
-        onPress={() => setMode(option)}
-        activeOpacity={0.7}
-      >
-        <Text style={[styles.themeIcon, { color: colors.glass60, fontSize: 16 }]}>{icon}</Text>
-        <Text style={[styles.themeName, { color: active ? colors.fg : colors.glass80, fontSize: 15 * fontScale, fontWeight: active ? '500' : '400' }]}>
-          {label}
-        </Text>
-        {active && <Text style={[styles.themeCheck, { color: colors.fg }]}>✓</Text>}
-      </TouchableOpacity>
-    );
-  };
+    value: string;
+    onPress: () => void;
+    isLast?: boolean;
+  }) => (
+    <TouchableOpacity
+      style={[
+        styles.optionRow,
+        !isLast && { borderBottomWidth: 1, borderBottomColor: colors.glass08 },
+      ]}
+      onPress={onPress}
+      activeOpacity={0.72}
+    >
+      <View style={[styles.optionIconWrap, { backgroundColor: colors.glass08 }]}>
+        <MaterialIcons name={icon} size={20} color={colors.glass60} />
+      </View>
+      <Text style={[styles.optionLabel, { color: colors.fg, fontSize: 15 * fontScale }]}>
+        {label}
+      </Text>
+      <Text style={[styles.optionValue, { color: colors.glass60, fontSize: 14 * fontScale }]}>
+        {value}
+      </Text>
+      <MaterialIcons name="expand-more" size={18} color={colors.glass45} />
+    </TouchableOpacity>
+  );
 
-  const DnsInput = ({ field, value }: { field: 'dns1' | 'dns2'; value: string }) => (
-    <View style={[styles.inputWrap, { backgroundColor: colors.glass08, borderColor: colors.glass12 }]}>
-      <TextInput
+  const ToggleRow = ({
+    icon,
+    label,
+    value,
+    onChange,
+    isLast = false,
+  }: {
+    icon: keyof typeof MaterialIcons.glyphMap;
+    label: string;
+    value: boolean;
+    onChange: (next: boolean) => Promise<void>;
+    isLast?: boolean;
+  }) => (
+    <View
+      style={[
+        styles.optionRow,
+        !isLast && { borderBottomWidth: 1, borderBottomColor: colors.glass08 },
+      ]}
+    >
+      <View style={[styles.optionIconWrap, { backgroundColor: colors.glass08 }]}>
+        <MaterialIcons name={icon} size={20} color={colors.glass60} />
+      </View>
+      <Text style={[styles.optionLabel, { color: colors.fg, fontSize: 15 * fontScale }]}>
+        {label}
+      </Text>
+      <Switch
         value={value}
-        onChangeText={(v) => setSetting(field, v)}
-        style={[styles.input, { color: colors.fg, fontSize: 14 * fontScale }]}
-        keyboardType="numeric"
-        placeholderTextColor={colors.glass30}
-        selectionColor={colors.fg}
+        onValueChange={(next) => {
+          void onChange(next);
+        }}
+        trackColor={{ false: colors.glass20, true: colors.glass45 }}
+        thumbColor={colors.fg}
       />
     </View>
   );
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.bg }]}>
+    <SafeAreaView style={[styles.root, { backgroundColor: colors.bg }]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.bg} />
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <View style={styles.titleRow}>
-          <Text style={[styles.title, { color: colors.fg, fontSize: 28 * fontScale }]}>
-            {t('НАСТРОЙКИ', 'SETTINGS')}
+        <Text style={[styles.title, { color: colors.fg, fontSize: 28 * fontScale }]}>
+          {t('НАСТРОЙКИ', 'SETTINGS')}
+        </Text>
+        <Text style={[styles.version, { color: colors.glass45, fontSize: 12 * fontScale }]}>Spacy v1.0.0</Text>
+
+        <SectionTitle label={t('ИНТЕРФЕЙС', 'INTERFACE')} />
+        <View style={[styles.card, { backgroundColor: colors.glass04 }]}>
+          <OptionRow
+            icon="contrast"
+            label={t('ТЕМА', 'THEME')}
+            value={mode[0].toUpperCase() + mode.slice(1)}
+            onPress={() => {
+              void cycleValue<ThemeMode>(['dark', 'light', 'system'], mode, setMode);
+            }}
+          />
+          <OptionRow
+            icon="translate"
+            label={t('ЯЗЫК', 'LANGUAGE')}
+            value={language === 'ru' ? 'Russian' : 'English'}
+            onPress={() => {
+              void cycleValue<Language>(['ru', 'en'], language, (next) => setSetting('language', next));
+            }}
+          />
+          <OptionRow
+            icon="text-fields"
+            label={t('РАЗМЕР ШРИФТА', 'FONT SIZE')}
+            value={fontSize[0].toUpperCase() + fontSize.slice(1)}
+            onPress={() => {
+              void cycleValue<FontSize>(['small', 'medium', 'large'], fontSize, (next) =>
+                setSetting('fontSize', next)
+              );
+            }}
+            isLast
+          />
+        </View>
+
+        <SectionTitle label={t('ПОДПИСКА', 'SUBSCRIPTION')} />
+        <View style={[styles.card, { backgroundColor: colors.glass04 }]}>
+          <OptionRow
+            icon="speed"
+            label={t('ПРОТОКОЛ ПИНГА', 'PING PROTOCOL')}
+            value={pingProtocol.toUpperCase()}
+            onPress={() => {
+              void cycleValue<PingProtocol>(['tcp', 'udp'], pingProtocol, (next) =>
+                setSetting('pingProtocol', next)
+              );
+            }}
+            isLast
+          />
+        </View>
+
+        <SectionTitle label={t('СЕТЬ', 'NETWORK')} />
+        <View style={[styles.card, { backgroundColor: colors.glass04 }]}>
+          <OptionRow
+            icon="mobile-friendly"
+            label={t('ПО ТРЕБОВАНИЮ', 'ON DEMAND')}
+            value={
+              onDemandMode === 'off'
+                ? 'Off'
+                : onDemandMode === 'wifi'
+                ? 'Wi-Fi'
+                : 'Always'
+            }
+            onPress={() => {
+              void cycleValue<OnDemandMode>(['off', 'wifi', 'always'], onDemandMode, (next) =>
+                setSetting('onDemandMode', next)
+              );
+            }}
+          />
+          <ToggleRow
+            icon="swap-horiz"
+            label="ENABLE MUX"
+            value={muxEnabled}
+            onChange={(next) => setSetting('muxEnabled', next)}
+          />
+          <ToggleRow
+            icon="filter-center-focus"
+            label="ENABLE FRAGMENTATION"
+            value={fragmentationEnabled}
+            onChange={(next) => setSetting('fragmentationEnabled', next)}
+          />
+          <OptionRow
+            icon="dns"
+            label="DNS PRESET"
+            value={dnsPreset[0].toUpperCase() + dnsPreset.slice(1)}
+            onPress={() => {
+              void cycleValue<DnsPreset>(['custom', 'cloudflare', 'google'], dnsPreset, applyDnsPreset);
+            }}
+            isLast
+          />
+        </View>
+
+        <View style={[styles.card, { backgroundColor: colors.glass04 }]}>
+          <Text style={[styles.inputLabel, { color: colors.glass45, fontSize: 11 * fontScale }]}>
+            Primary DNS
           </Text>
-          <Text style={[styles.version, { color: colors.glass45, fontSize: 12 * fontScale }]}>Spacy v1.0</Text>
-        </View>
+          <TextInput
+            value={dns1}
+            onChangeText={(next) => {
+              void setSetting('dns1', next);
+            }}
+            style={[styles.input, { color: colors.fg, fontSize: 15 * fontScale, borderColor: colors.glass08 }]}
+            placeholderTextColor={colors.glass30}
+          />
 
-        <View style={[styles.card, { backgroundColor: colors.glass04, borderColor: colors.glass12 }]}>
-          <SectionLabel label={t('ЯЗЫК', 'LANGUAGE')} />
-          <SegmentControl<Language>
-            options={['en', 'ru']}
-            value={language}
-            onChange={(v) => setSetting('language', v)}
-            labels={['ENGLISH', 'RUSSIAN']}
+          <Text style={[styles.inputLabel, { color: colors.glass45, fontSize: 11 * fontScale, marginTop: 14 }]}>
+            Secondary DNS
+          </Text>
+          <TextInput
+            value={dns2}
+            onChangeText={(next) => {
+              void setSetting('dns2', next);
+            }}
+            style={[styles.input, { color: colors.fg, fontSize: 15 * fontScale, borderColor: colors.glass08 }]}
+            placeholderTextColor={colors.glass30}
           />
         </View>
 
-        <View style={[styles.card, { backgroundColor: colors.glass04, borderColor: colors.glass12 }]}>
-          <SectionLabel label={t('РАЗМЕР ШРИФТА', 'FONT SIZE')} />
-          <SegmentControl<FontSize>
-            options={['small', 'medium', 'large']}
-            value={fontSize}
-            onChange={(v) => setSetting('fontSize', v)}
-            labels={['SMALL', 'MEDIUM', 'LARGE']}
+        <SectionTitle label={t('МАРШРУТИЗАЦИЯ', 'ROUTING')} />
+        <View style={[styles.card, { backgroundColor: colors.glass04 }]}>
+          <ToggleRow
+            icon="alt-route"
+            label={t('ВКЛЮЧИТЬ ROUTING', 'ENABLE ROUTING')}
+            value={routeAllTraffic}
+            onChange={(next) => setSetting('routeAllTraffic', next)}
+            isLast
           />
         </View>
 
-        <View style={[styles.card, { backgroundColor: colors.glass04, borderColor: colors.glass12, paddingBottom: 0 }]}>
-          <SectionLabel label={t('ТЕМА', 'THEME')} />
-          <ThemeOption option="dark" icon="🌙" label="Dark" />
-          <ThemeOption option="light" icon="☀️" label="Light" />
-          <View style={[{ borderBottomWidth: 0 }]}>
-            <TouchableOpacity
-              style={styles.themeRow}
-              onPress={() => setMode('system')}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.themeIcon, { color: colors.glass60, fontSize: 16 }]}>⊙</Text>
-              <Text style={[styles.themeName, { color: mode === 'system' ? colors.fg : colors.glass80, fontSize: 15 * fontScale, fontWeight: mode === 'system' ? '500' : '400' }]}>
-                System
-              </Text>
-              {mode === 'system' && <Text style={[styles.themeCheck, { color: colors.fg }]}>✓</Text>}
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <View style={[styles.card, { backgroundColor: colors.glass04, borderColor: colors.glass12 }]}>
-          <SectionLabel label={t('СЕТЕВЫЕ НАСТРОЙКИ', 'NETWORK SETTINGS')} />
-
-          <Text style={[styles.fieldLabel, { color: colors.glass45, fontSize: 11 * fontScale }]}>DNS #1</Text>
-          <DnsInput field="dns1" value={dns1} />
-
-          <Text style={[styles.fieldLabel, { color: colors.glass45, fontSize: 11 * fontScale, marginTop: 10 }]}>DNS #2</Text>
-          <DnsInput field="dns2" value={dns2} />
-
-          <View style={[styles.trafficRow, { marginTop: 14 }]}>
-            <SegmentControl<TrafficMode>
-              options={['safe', 'balanced', 'aggressive']}
-              value={trafficMode}
-              onChange={(v) => setSetting('trafficMode', v)}
-              labels={[t('БЕЗОПАСНЫЙ', 'SAFE'), t('СБАЛАНСИРОВАННЫЙ', 'BALANCED'), t('АГРЕССИВНЫЙ', 'AGGRESSIVE')]}
-            />
-          </View>
-
-          <View style={[styles.switchRow, { borderTopColor: colors.glass08, marginTop: 14 }]}>
-            <Text style={[styles.switchLabel, { color: colors.fg, fontSize: 14 * fontScale }]}>
-              {t('Включить MUX', 'Enable MUX')}
-            </Text>
-            <Switch
-              value={muxEnabled}
-              onValueChange={(v) => setSetting('muxEnabled', v)}
-              trackColor={{ false: colors.glass20, true: colors.active }}
-              thumbColor={colors.fg}
-            />
-          </View>
-
-          {muxEnabled && (
-            <View style={[styles.switchRow, { borderTopColor: colors.glass08 }]}>
-              <Text style={[styles.switchLabel, { color: colors.fg, fontSize: 14 * fontScale }]}>
-                {t('Параллельность MUX', 'MUX Concurrency')}
-              </Text>
-              <View style={styles.counterRow}>
-                <TouchableOpacity
-                  style={[styles.counterBtn, { borderColor: colors.glass20 }]}
-                  onPress={() => muxConcurrency > 1 && setSetting('muxConcurrency', muxConcurrency - 1)}
-                >
-                  <Text style={[{ color: colors.fg, fontSize: 16 }]}>−</Text>
-                </TouchableOpacity>
-                <Text style={[styles.counterVal, { color: colors.fg, fontSize: 14 * fontScale }]}>
-                  {muxConcurrency}
-                </Text>
-                <TouchableOpacity
-                  style={[styles.counterBtn, { borderColor: colors.glass20 }]}
-                  onPress={() => muxConcurrency < 32 && setSetting('muxConcurrency', muxConcurrency + 1)}
-                >
-                  <Text style={[{ color: colors.fg, fontSize: 16 }]}>+</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-
-          <View style={[styles.switchRow, { borderTopColor: colors.glass08 }]}>
-            <Text style={[styles.switchLabel, { color: colors.fg, fontSize: 14 * fontScale }]}>
-              {t('Включить Noise', 'Enable Noise')}
-            </Text>
-            <Switch
-              value={noiseEnabled}
-              onValueChange={(v) => setSetting('noiseEnabled', v)}
-              trackColor={{ false: colors.glass20, true: colors.active }}
-              thumbColor={colors.fg}
-            />
-          </View>
-        </View>
-
-        <View style={{ height: 30 }} />
+        <View style={{ height: 120 }} />
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -236,103 +264,56 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   scroll: {
     paddingHorizontal: 20,
-    paddingTop: 60,
-    gap: 12,
-  },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
-    marginBottom: 4,
+    paddingTop: 14,
+    gap: 10,
   },
   title: {
-    fontWeight: '700',
-    letterSpacing: 1,
+    fontFamily: mono.light,
+    letterSpacing: 2.6,
   },
-  version: {
-    letterSpacing: 0.3,
+  version: { fontFamily: mono.regular },
+  sectionTitle: {
+    marginTop: 10,
+    marginBottom: 6,
+    fontFamily: mono.bold,
+    letterSpacing: 2,
   },
   card: {
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 16,
-    gap: 0,
+    borderRadius: 22,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
   },
-  sectionLabel: {
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    marginBottom: 12,
-    paddingBottom: 8,
-    borderBottomWidth: 1,
-  },
-  segment: {
+  optionRow: {
     flexDirection: 'row',
-    borderRadius: 10,
-    borderWidth: 1,
-    padding: 3,
-    gap: 3,
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
   },
-  segItem: {
-    flex: 1,
-    paddingVertical: 8,
-    borderRadius: 8,
+  optionIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  segText: {
-    fontWeight: '600',
-    letterSpacing: 0.5,
+  optionLabel: {
+    flex: 1,
+    fontFamily: mono.bold,
+    letterSpacing: 0.2,
   },
-  themeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    gap: 12,
+  optionValue: {
+    fontFamily: mono.regular,
   },
-  themeIcon: {},
-  themeName: { flex: 1 },
-  themeCheck: { fontSize: 16, fontWeight: '500' },
-  fieldLabel: {
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    marginBottom: 6,
-  },
-  inputWrap: {
-    borderRadius: 10,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+  inputLabel: {
+    marginBottom: 8,
+    fontFamily: mono.bold,
+    letterSpacing: 1.4,
   },
   input: {
-    padding: 0,
-    margin: 0,
-  },
-  trafficRow: {},
-  switchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    gap: 12,
-  },
-  switchLabel: { flex: 1 },
-  counterRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  counterBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
     borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  counterVal: {
-    minWidth: 24,
-    textAlign: 'center',
-    fontWeight: '600',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontFamily: mono.regular,
   },
 });

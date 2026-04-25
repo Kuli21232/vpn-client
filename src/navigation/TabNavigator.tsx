@@ -1,57 +1,42 @@
-import React, { useRef, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Animated, Platform } from 'react-native';
+import React from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import { Ionicons } from '@expo/vector-icons';
+import { MaterialIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import HomeScreen from '../screens/HomeScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import { useTheme } from '../context/ThemeContext';
 import { useSettings } from '../context/SettingsContext';
+import { mono } from '../theme/typography';
 
 const Tab = createBottomTabNavigator();
 
 const TAB_CONFIG = [
-  { name: 'Home', icon: 'globe-outline' as const, iconActive: 'globe' as const, labelRu: 'Главная', labelEn: 'Home' },
-  { name: 'Profile', icon: 'person-outline' as const, iconActive: 'person' as const, labelRu: 'Профиль', labelEn: 'Profile' },
-  { name: 'Settings', icon: 'settings-outline' as const, iconActive: 'settings' as const, labelRu: 'Настройки', labelEn: 'Settings' },
+  { name: 'Home', icon: 'language' as const, labelRu: 'Главная', labelEn: 'Home' },
+  { name: 'Profile', icon: 'account-circle' as const, labelRu: 'Профиль', labelEn: 'Profile' },
+  { name: 'Settings', icon: 'settings' as const, labelRu: 'Настройки', labelEn: 'Settings' },
 ];
 
 function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
   const { colors, isDark } = useTheme();
   const { language } = useSettings();
-  const anims = TAB_CONFIG.map(() => useRef(new Animated.Value(0)).current);
-
-  useEffect(() => {
-    anims.forEach((anim, i) => {
-      Animated.spring(anim, {
-        toValue: state.index === i ? 1 : 0,
-        tension: 180,
-        friction: 14,
-        useNativeDriver: true,
-      }).start();
-    });
-  }, [state.index]);
+  const insets = useSafeAreaInsets();
 
   return (
-    <View style={styles.barWrap}>
+    <View style={[styles.barWrap, { paddingBottom: Math.max(insets.bottom, Platform.OS === 'android' ? 14 : 24) }]}>
       <View
         style={[
           styles.bar,
           {
-            backgroundColor: isDark ? 'rgba(18,18,18,0.97)' : 'rgba(248,248,248,0.97)',
-            borderColor: colors.glass12,
+            backgroundColor: isDark ? 'rgba(22,22,24,0.98)' : 'rgba(245,245,245,0.98)',
+            borderColor: colors.glass08,
           },
         ]}
       >
-        {TAB_CONFIG.map((tab, i) => {
-          const focused = state.index === i;
-          const anim = anims[i];
-
-          const iconScale = anim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] });
-          const dotOpacity = anim.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
-          const labelOpacity = anim.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] });
-
+        {TAB_CONFIG.map((tab, index) => {
+          const focused = state.index === index;
           const label = language === 'ru' ? tab.labelRu : tab.labelEn;
 
           return (
@@ -61,23 +46,30 @@ function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
               onPress={() => navigation.navigate(tab.name)}
               activeOpacity={0.7}
             >
-              <Animated.View style={{ transform: [{ scale: iconScale }], alignItems: 'center', gap: 4 }}>
-                <View style={styles.iconWrap}>
-                  <Ionicons
-                    name={focused ? tab.iconActive : tab.icon}
-                    size={22}
-                    color={focused ? colors.fg : colors.glass45}
-                  />
-                  <Animated.View
-                    style={[styles.activeDot, { backgroundColor: colors.fg, opacity: dotOpacity }]}
-                  />
-                </View>
-                <Animated.Text
-                  style={[styles.tabLabel, { color: colors.fg, opacity: labelOpacity }]}
+              <View
+                style={[
+                  styles.itemPill,
+                  {
+                    backgroundColor: focused ? colors.glass12 : 'transparent',
+                  },
+                ]}
+              >
+                <MaterialIcons
+                  name={tab.icon}
+                  size={25}
+                  color={focused ? colors.fg : colors.glass45}
+                />
+                <Text
+                  style={[
+                    styles.tabLabel,
+                    {
+                      color: focused ? colors.fg : colors.glass60,
+                    },
+                  ]}
                 >
                   {label}
-                </Animated.Text>
-              </Animated.View>
+                </Text>
+              </View>
             </TouchableOpacity>
           );
         })}
@@ -86,20 +78,14 @@ function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
   );
 }
 
-interface Props {
-  onLogout: () => void;
-}
-
-export default function TabNavigator({ onLogout }: Props) {
+export default function TabNavigator() {
   return (
     <Tab.Navigator
       tabBar={(props) => <FloatingTabBar {...props} />}
       screenOptions={{ headerShown: false }}
     >
       <Tab.Screen name="Home" component={HomeScreen} />
-      <Tab.Screen name="Profile">
-        {() => <ProfileScreen onLogout={onLogout} />}
-      </Tab.Screen>
+      <Tab.Screen name="Profile" component={ProfileScreen} />
       <Tab.Screen name="Settings" component={SettingsScreen} />
     </Tab.Navigator>
   );
@@ -111,20 +97,19 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    paddingHorizontal: 20,
-    paddingBottom: Platform.OS === 'android' ? 16 : 28,
-    paddingTop: 8,
+    paddingHorizontal: 18,
+    paddingTop: 6,
     pointerEvents: 'box-none',
   },
   bar: {
     flexDirection: 'row',
-    borderRadius: 28,
+    borderRadius: 30,
     borderWidth: 1,
-    paddingVertical: 10,
+    paddingVertical: 6,
     paddingHorizontal: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.22,
     shadowRadius: 20,
     elevation: 16,
   },
@@ -132,22 +117,19 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 4,
+    paddingVertical: 1,
   },
-  iconWrap: {
+  itemPill: {
     alignItems: 'center',
-    gap: 0,
-  },
-  activeDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    marginTop: 2,
+    gap: 3,
+    borderRadius: 22,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    minWidth: 88,
   },
   tabLabel: {
-    fontSize: 10,
-    fontWeight: '500',
-    letterSpacing: 0.3,
-    fontFamily: 'SpaceGrotesk_500Medium',
+    fontSize: 9,
+    letterSpacing: 0.4,
+    fontFamily: mono.bold,
   },
 });
